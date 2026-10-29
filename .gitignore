@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.claude/
+.vscode/
+.env
+# site-specific network config (contains IP addresses)
+ros/fastdds_pc.xml
+# large voice models come from the base repo's scripts/install_piper.sh
+*.onnx
+*.onnx.json
+*.wav

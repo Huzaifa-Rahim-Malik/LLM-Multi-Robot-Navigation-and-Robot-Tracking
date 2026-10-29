@@ -1,0 +1,90 @@
+locations:
+  Home:
+    x: 0.0
+    y: 0.0
+    theta: 0.0
+  HR office:
+    x: 0.0
+    y: 1.0
+    theta: 0.0
+  Robotics Lab:
+    x: 0.0
+    y: 2.0
+    theta: 0.0
+  Lawn:
+    x: 1.0
+    y: 0.0
+    theta: 1.57
+  Predictive Lab:
+    x: 1.0
+    y: 2.0
+    theta: 0.0
+  Finance office:
+    x: 1.0
+    y: 3.0
+    theta: 4.71
+  Main Gate:
+    x: 1.9
+    y: 0.95
+    theta: 0
+  # Physics:
+  #   x: 2.0
+  #   y: 2.0
+  #   theta: 0.0
+  Software Lab:
+    x: 2.99
+    y: 0.0
+    theta: 1.57
+  Director office:
+    x: 3.0
+    y: 3.0
+    theta: 4.71
+  Quantum Lab:
+    x: 4.0
+    y: 0.0
+    theta: 0.0
+  Admin Office:
+    x: 4.0
+    y: 1.0
+    theta: 0.0
+  Askari Bank:
+    x: 5.0
+    y: 1.0
+    theta: 0.0
+  BOQ:
+    x: 5.0
+    y: 3.0
+    theta: 4.71
+  Data Science Lab:
+    x: 6.0
+    y: 0.0
+    theta: 1.57
+  Security Gate:
+    x: 6.0
+    y: 2.0
+    theta: 0.0
+  Fire Room:
+    x: 7.0
+    y: 0.0
+    theta: 1.57
+  Warehouse:
+    x: 7.0
+    y: 2.0
+    theta: 0.0
+  Store:
+    x: 7.0
+    y: 3.0
+    theta: 4.71
+  Canteen:
+    x: 8.0
+    y: 0.0
+    theta: 3.14
+  MOQ:
+    x: 8.0
+    y: 1.0
+    theta: 3.14
+  DG Office:
+    x: 8.0
+    y: 3.0
+    theta: 3.14
+  

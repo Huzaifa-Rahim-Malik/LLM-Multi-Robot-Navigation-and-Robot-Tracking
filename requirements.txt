@@ -1,0 +1,21 @@
+# Python dependencies for the multi-robot extension (leader TurtleBot 4 + dual-ZED tracking).
+# ROS 2 Jazzy packages (rclpy, nav2_simple_commander, geometry_msgs, nav_msgs, sensor_msgs,
+# std_msgs, domain_bridge, ...) come from apt, NOT pip.
+# The ZED SDK + its Python API (pyzed) are installed separately from Stereolabs:
+#   https://www.stereolabs.com/docs/app-development/python/install
+
+# --- navigation assistant (same stack as the base repo) ---
+numpy
+scipy
+PyYAML
+transforms3d
+ollama
+openai-whisper
+faster-whisper
+sounddevice
+torch
+
+# --- multi-robot tracking (new in this repo) ---
+ultralytics        # YOLOv8 detector
+opencv-python
+Pillow             # camera/arena panels in the Tk GUI

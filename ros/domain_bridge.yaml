@@ -1,0 +1,9 @@
+# Bridges the leader's arrival message (domain 23) to the follower side (domain 35).
+# Run:  ros2 run domain_bridge domain_bridge ros/domain_bridge.yaml
+name: my_bridge
+topics:
+  /robot_pos_data:
+    type: std_msgs/msg/String
+    from_domain: 23
+    to_domain: 35
+    bidirectional: true
