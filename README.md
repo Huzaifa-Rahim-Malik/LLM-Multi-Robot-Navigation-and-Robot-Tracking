@@ -6,61 +6,94 @@ natural-language text/voice commands; two ceiling-mounted ZED 2i cameras track e
 coordinates; and the leader publishes its arrival position so the custom
 [Mini Swarm Vehicle](https://github.com/Huzaifa-Rahim-Malik/Mini_Swarm_vehicle) (the follower) can be sent to it.
 
+<p align="center"> <img src="Results/GUI.png" alt="Image" width="800"><br> </p>
+
 The base project has **no camera feed and no object tracking**. This repo adds exactly that, plus the pose
 hand-off to the second robot. Everything that is only about LLM/STT/TTS evaluation, result videos, install
-scripts and the Piper voice model stays in the base repo and is **not duplicated here**.
+scripts and the Piper voice model stays in the base repo.
 
-## What is new compared with the base repo
+## Updated Area
 
-| Area | File | What it adds |
-|---|---|---|
-| Global tracking | `src/dual_camera_tracker.py` | Two ZED 2i cameras → YOLOv8 detection → depth (XYZ) → affine transform to arena (x, y) → cross-camera fusion → Hungarian matching to persistent global track IDs (same ID survives camera hand-off) |
-| Calibration | `tools/calibrate_capture.py`, `config/cam*_points.json` | Click-based capture of (arena x,y) ↔ (ZED X,Y,Z) pairs per camera; the tracker fits the affine transform from them |
-| Detector | `models/yolov8_zed_2class.pt` | 2-class YOLOv8 model trained for the ZED views |
-| Robot → follower hand-off | `src/pose_publisher.py` | `/robot/pose` (10 Hz) and `/robot_pos_data` (`"x:<val> y:<val>"`, published once on arrival) |
-| Multi-robot GUI | `src/gui.py` | 3-column Tk GUI: chat · Camera 1 / arena tracking / leader sensor data (`/odom`, `/scan`, `/imu`) · Camera 2 / locations / controls |
-| Cross-domain link | `ros/domain_bridge.yaml` | Bridges `/robot_pos_data` between ROS domain 23 (leader) and 35 (follower side) |
-| Network config | `ros/env.sh`, `ros/fastdds_pc.example.xml`, `ros/cyclonedds_pc.xml` | Per-terminal ROS environment and Fast DDS unicast discovery for the PC ↔ robot Wi-Fi link |
-
-The language-understanding pipeline (`intent_detector.py`, `location_extractor.py`, `response_generator.py`,
-`voice_input.py`, `voice_output.py`, `robot_navigator.py`, `location_manager.py`) is the base project's. It is
-included only so this repo runs on its own; `chat_interface.py` and `main.py` are the versions that call the
-pose publisher.
+| Area |  What it adds |
+|---|---|
+| Global tracking | Two ZED 2i cameras → YOLOv8 detection → depth (XYZ) → affine transform to arena (x, y) → cross-camera fusion → Hungarian matching to persistent global track IDs (same ID survives camera hand-off) |
+| Calibration | Click-based capture of (arena x,y) ↔ (ZED X,Y,Z) pairs per camera; the tracker fits the affine transform from them |
+| Detector |  2-class YOLOv8 model trained for the ZED views |
+| Robot → follower hand-off |  `/robot/pose` (10 Hz) and `/robot_pos_data` (`"x:<val> y:<val>"`, published once on arrival) |
+| Multi-robot GUI |  3-column Tk GUI: chat · Camera 1 / arena tracking / leader sensor data (`/odom`, `/scan`, `/imu`) · Camera 2 / locations / controls |
+| Cross-domain link | Bridges `/robot_pos_data` between ROS domain 23 (leader) and 35 (follower side) |
 
 ## Architecture
+The system has four parts: **initialization** (run once), the **runtime** voice/text pipeline driving the
+leader, the **leader–follower bridge**, and **multi-camera perception**.
 
-```
-   speech / text ──► Whisper ──► intent + location (rules, Ollama LLM fallback) ──► Nav2 goal
-                                                                                      │
-                  ┌───────────────────────────────────────────────────────────────────▼─────────┐
-                  │ Leader: TurtleBot 4  (ROS 2 Jazzy, domain 23)                                 │
-                  │   /odom  /scan  /imu ──► GUI sensor panel                                     │
-                  │   on arrival ──► pose_publisher ──► /robot/pose, /robot_pos_data "x:.. y:.."  │
-                  └───────────────────────────────────────────────┬─────────────────────────────┘
-                                                                  │ domain_bridge  (23 ⇄ 35)
-                                                                  ▼
-                                              Follower: Mini Swarm Vehicle (domain 35)
 
-   ZED 2i #1 ─┐
-              ├─► YOLOv8 ─► depth XYZ ─► affine ─► fuse ─► Hungarian tracks ─► arena view in GUI
-   ZED 2i #2 ─┘
+```mermaid
+flowchart LR
+    MIC[Microphone] --> STT[Whisper STT]
+    TXT[GUI text chat] --> INT
+    STT --> INT[Intent detector<br/>rule-based]
+    INT -- chat --> LLM[Ollama LLM]
+    INT -- navigate --> EXT[Location extractor<br/>rules + LLM fallback]
+    YML[(locations.yaml<br/>+ map bounds)] --> EXT
+    EXT -- goal --> NAV[Nav2<br/>NavigateToPose]
+    NAV <--> ROB[Leader: TurtleBot 4<br/>ROS 2 Jazzy, domain 23]
+    LLM --> TTS[Piper TTS]
+    NAV --> TTS
+    TTS -- replies --> GUI[Monitoring GUI]
+    ROB -. /odom /scan /imu .-> GUI
+    ROB -- on arrival --> PUB[pose_publisher]
+    PUB --> BRG[domain_bridge<br/>23 ⇄ 35]
+    BRG --> FOL[Follower: Mini Swarm Vehicle<br/>domain 35]
+    Z1[ZED 2i #1] --> YOLO[YOLOv8]
+    Z2[ZED 2i #2] --> YOLO
+    YOLO --> DEP[Depth → XYZ] --> AFF[Affine → arena frame] --> FUSE[Fusion] --> TRK[Hungarian tracks]
+    TRK --> GUI
 ```
+
+### 1. Initialization (run once at startup)
+
+Launch script → saved map of the 8 × 3 m arena → SLAM Toolbox / localization → Nav2 + RViz →
+`/initialpose`. The initial pose **must match the robot's physical start pose**, otherwise localization
+and goals will be offset.
+
+### 2. Runtime (voice/text → leader robot)
+
+- **Input:** commands arrive by microphone (through **Whisper** speech-to-text) or by the GUI text chat.
+- **Intent detector (rule-based):** decides whether the message is *chat* or *navigate*. Chat goes to the
+  **Ollama LLM**, which writes a reply. Navigate goes to the location extractor.
+- **Location extractor:** finds the destination with rules first and the **Ollama LLM as a fallback**. Named
+  places are resolved from `src/locations.yaml` together with the map bounds, and the result is sent to
+  Nav2 as a goal.
+- **Navigation:** **Nav2** (`NavigateToPose`) drives the **leader TurtleBot 4**, which localizes with AMCL
+  on the SLAM-built map.
+- **Voice output:** **Piper TTS** speaks the chat reply and the navigation status through a Bluetooth
+  speaker. The same replies are shown in the **Monitoring GUI**, together with the leader's `/odom`,
+  `/scan` and `/imu` plots.
+
+### 3. Leader–follower bridge
+
+The leader runs ROS 2 Jazzy on **domain 23**; the follower Mini Swarm Vehicle is on **domain 35**.
+On arrival, `pose_publisher` publishes `/robot/pose` and `/robot_pos_data` (`"x:<val> y:<val>"`), and
+`domain_bridge` forwards `/robot_pos_data` between domains 23 and 35 so the follower can be sent to the
+leader's position.
+
+### 4. Multi-camera perception
+
+Two **ZED 2i** cameras feed **YOLOv8** detection. Each detection is converted to XYZ with depth, mapped
+into the common arena frame with a per-camera **affine transform**, **fused** across cameras and matched
+over time with the **Hungarian** algorithm to give persistent global track IDs. The tracks are drawn in the
+arena view of the Monitoring GUI.
 
 The follower's own ROS-side code is not part of this repo; its hardware, Altium design and Arduino firmware
 are in the Mini_Swarm_vehicle repo.
 
+
+<p align="center"> <img src="Results/system.png" alt="System architecture" width="800"> </p>
 ## Repository layout
 
 ```
-src/        application code (run from here)
-  gui.py                  multi-robot GUI (entry point)
-  main.py                 terminal-only entry point (no GUI, no cameras)
-  chat_interface.py       chat loop; notifies the pose publisher on navigate / arrive
-  pose_publisher.py       /robot/pose and /robot_pos_data
-  dual_camera_tracker.py  dual-ZED YOLO tracker (also runnable standalone)
-  locations.yaml          named goals for the arena map
-  + base-project modules  intent_detector, location_extractor, location_manager,
-                          response_generator, robot_navigator, voice_input, voice_output
+Results/        Demo and GUI videos
 config/     cam1_points.json, cam2_points.json     camera ↔ arena calibration points
 models/     yolov8_zed_2class.pt
 maps/       robotic_arena.pgm / .yaml              map used by this setup
@@ -78,26 +111,15 @@ ros/        env.sh, fastdds_pc.example.xml, cyclonedds_pc.xml, domain_bridge.yam
 ## Quick start
 
 ```bash
-# 0. One-time: voice models and robot bring-up come from the base repo
-#    (scripts/install_voice.sh, scripts/install_piper.sh, scripts/robot_launch.sh).
-#    Use maps/robotic_arena.yaml from this repo for the map.
-
-# 1. Network config
-cp ros/fastdds_pc.example.xml ros/fastdds_pc.xml     # then put in your PC and robot IPs
-source ros/env.sh                                    # in EVERY terminal that talks to the robot
-
-# 2. Start the robot stack (base repo: scripts/robot_launch.sh), then:
+# 1. Start the robot stack (base repo: scripts/robot_launch.sh), then:
 cd src
 python3 gui.py                    # GUI + dual-camera tracking
 python3 gui.py --text-only        # no voice
 # python3 main.py                 # terminal only
 
-# 3. Hand-off to the follower domain (separate terminal)
+# 2. Hand-off to the follower domain (separate terminal)
 ros2 run domain_bridge domain_bridge ros/domain_bridge.yaml
 ```
-
-Run the tracker alone: `python3 src/dual_camera_tracker.py [--weights ...] [--gating 0.6] [--merge 0.4]`.
-
 ### Camera calibration (once per camera, or after moving a camera)
 
 ```bash
@@ -116,12 +138,27 @@ The ZED serial numbers are set in `src/gui.py` (`CameraWorker(0, 35090194, ...)`
 | `/robot/pose` | `geometry_msgs/PoseWithCovarianceStamped` | 10 Hz, frame `map` |
 | `/robot_pos_data` | `std_msgs/String`, `"x:<val> y:<val>"` | once on arrival, using the goal coordinates (falls back to the live AMCL pose) |
 
+The leader's `/odom`, `/scan` and `/imu` are consumed by the GUI sensor panel.
+
+## Demo 
+**GUI**
+
+<p align="center"><img src="Results/GUI.gif" alt="GUI" width="800"> 
+</p>
+
+**Real Time Camera Tracking**
+
+<p align="center"><img src="Results/Camera.gif" alt="Camera" width="800"> </p>
+
+
 ## Known limitations
 
 - Arena goals (`src/locations.yaml`) and the map are specific to the original lab.
 - Camera serial numbers are hard-coded (see above).
-- The follower-side controller is not included here.
 
-## License
-
-MIT — see `LICENSE`.
+## Author
+This project is done by the following team members
+- Dr. Muhammad Ahmad Kamran (Team Lead), AITeC Islamabad
+- Muhammad Huzaifa Rahim Malik (TurtleBot4 Algorithm Design + GUI Development), AITeC Islamabad
+- Muhammad Awais Khan (Mini Swarm Vehicle Algorithm Design), AITeC Islamabad
+- Muhammad Rizwan (Camera Tracking Algorithm Design), AITeC Islamabad
