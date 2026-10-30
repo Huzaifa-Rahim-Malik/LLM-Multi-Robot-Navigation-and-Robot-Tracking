@@ -27,29 +27,7 @@ scripts and the Piper voice model stays in the base repo.
 The system has four parts: **initialization** (run once), the **runtime** voice/text pipeline driving the
 leader, the **leader–follower bridge**, and **multi-camera perception**.
 
-
-```mermaid
-flowchart LR
-    MIC[Microphone] --> STT[Whisper STT]
-    TXT[GUI text chat] --> INT
-    STT --> INT[Intent detector<br/>rule-based]
-    INT -- chat --> LLM[Ollama LLM]
-    INT -- navigate --> EXT[Location extractor<br/>rules + LLM fallback]
-    YML[(locations.yaml<br/>+ map bounds)] --> EXT
-    EXT -- goal --> NAV[Nav2<br/>NavigateToPose]
-    NAV <--> ROB[Leader: TurtleBot 4<br/>ROS 2 Jazzy, domain 23]
-    LLM --> TTS[Piper TTS]
-    NAV --> TTS
-    TTS -- replies --> GUI[Monitoring GUI]
-    ROB -. /odom /scan /imu .-> GUI
-    ROB -- on arrival --> PUB[pose_publisher]
-    PUB --> BRG[domain_bridge<br/>23 ⇄ 35]
-    BRG --> FOL[Follower: Mini Swarm Vehicle<br/>domain 35]
-    Z1[ZED 2i #1] --> YOLO[YOLOv8]
-    Z2[ZED 2i #2] --> YOLO
-    YOLO --> DEP[Depth → XYZ] --> AFF[Affine → arena frame] --> FUSE[Fusion] --> TRK[Hungarian tracks]
-    TRK --> GUI
-```
+<p align="center"> <img src="Results/system.png" alt="System architecture" width="800"> </p>
 
 ### 1. Initialization (run once at startup)
 
@@ -88,8 +66,6 @@ arena view of the Monitoring GUI.
 The follower's own ROS-side code is not part of this repo; its hardware, Altium design and Arduino firmware
 are in the Mini_Swarm_vehicle repo.
 
-
-<p align="center"> <img src="Results/system.png" alt="System architecture" width="800"> </p>
 ## Repository layout
 
 ```
@@ -150,9 +126,7 @@ The leader's `/odom`, `/scan` and `/imu` are consumed by the GUI sensor panel.
 
 <p align="center"><img src="Results/Camera.gif" alt="Camera" width="800"> </p>
 
-
 ## Known limitations
-
 - Arena goals (`src/locations.yaml`) and the map are specific to the original lab.
 - Camera serial numbers are hard-coded (see above).
 
